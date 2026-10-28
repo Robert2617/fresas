@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#B3173A">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Fresas con Crema · Ventas</title>
+<style>
+:root{
+  --berry:#B3173A; --berry-dark:#7E0F28; --blush:#FFF1F3; --cream:#FFFDF8; --leaf:#2F7D4A;
+  --ink:#3A1220; --muted:#8A6470; --line:#F0D3DA; --warn:#C0392B;
+  --r:16px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--blush);color:var(--ink);font-family:ui-rounded,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.4}
+header{background:var(--berry);color:#fff;padding:calc(env(safe-area-inset-top,0px) + 14px) 18px 14px;position:sticky;top:0;z-index:5}
+header h1{margin:0;font-size:20px;font-weight:800;letter-spacing:.2px}
+header small{opacity:.85;font-weight:500}
+main{padding:14px 14px calc(96px + env(safe-area-inset-bottom,0px));max-width:640px;margin:0 auto}
+section{display:none}
+section.on{display:block}
+.card{background:var(--cream);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:14px}
+h2{font-size:17px;margin:0 0 10px;font-weight:800}
+label{display:block;font-size:13px;font-weight:700;color:var(--muted);margin:10px 0 4px}
+input,select{width:100%;font:inherit;padding:12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;color:var(--ink)}
+input:focus,select:focus,button:focus-visible{outline:3px solid #F6A9B8;outline-offset:1px}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{min-width:0}
+.btn{width:100%;margin-top:12px;padding:13px;border:0;border-radius:12px;background:var(--berry);color:#fff;font:inherit;font-weight:800;cursor:pointer}
+.btn:active{background:var(--berry-dark)}
+.btn.ok{background:var(--leaf);font-size:18px;padding:16px}
+.btn.ghost{background:#fff;color:var(--berry);border:1.5px solid var(--berry)}
+.btn.sm{width:auto;margin:0;padding:8px 12px;font-size:14px}
+.btn.danger{background:#fff;color:var(--warn);border:1.5px solid var(--warn)}
+.item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px dashed var(--line)}
+.item:last-child{border-bottom:0}
+.item .t{font-weight:700}
+.item .s{font-size:13px;color:var(--muted)}
+.qty{display:flex;align-items:center;gap:8px}
+.qty button{width:34px;height:34px;border-radius:50%;border:1.5px solid var(--berry);background:#fff;color:var(--berry);font-size:20px;font-weight:800;line-height:1;cursor:pointer}
+.tot{display:flex;justify-content:space-between;padding:6px 0}
+.tot.big{font-size:24px;font-weight:900;color:var(--berry);border-top:2px solid var(--line);margin-top:6px;padding-top:12px}
+.pay{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pay button{padding:12px 4px;border-radius:12px;border:1.5px solid var(--line);background:#fff;font:inherit;font-weight:700;color:var(--ink);cursor:pointer}
+.pay button.on{background:var(--berry);border-color:var(--berry);color:#fff}
+.empty{color:var(--muted);text-align:center;padding:14px 0}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.stat{background:var(--berry);color:#fff;border-radius:var(--r);padding:14px}
+.stat.alt{background:var(--leaf)}
+.stat b{display:block;font-size:26px;font-weight:900}
+.stat span{font-size:13px;opacity:.9}
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--cream);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding-bottom:env(safe-area-inset-bottom,0px);z-index:6}
+nav button{border:0;background:none;padding:10px 2px 9px;font:inherit;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer}
+nav button .i{display:block;font-size:21px;line-height:1.1}
+nav button.on{color:var(--berry)}
+#toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 18px;border-radius:99px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .2s;z-index:9;max-width:90%;text-align:center}
+#toast.on{opacity:1}
+.tag{display:inline-block;font-size:12px;font-weight:700;background:var(--blush);color:var(--berry);border-radius:99px;padding:2px 9px}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+<header><h1>🍓 Fresas con Crema <small>· Ventas</small></h1></header>
+<main>
+
+<section id="v-venta" class="on">
+  <div class="card">
+    <h2>Nueva venta</h2>
+    <label for="s-client">Cliente</label>
+    <select id="s-client"></select>
+    <label for="s-prod">Producto</label>
+    <div class="row">
+      <select id="s-prod" style="flex:2"></select>
+      <input id="s-qty" type="number" min="1" value="1" inputmode="numeric" style="flex:1" aria-label="Cantidad">
+    </div>
+    <button class="btn ghost" onclick="addItem()">Agregar al pedido</button>
+  </div>
+
+  <div class="card">
+    <h2>Pedido</h2>
+    <div id="cart"></div>
+    <div class="tot"><span>Subtotal</span><b id="t-sub"></b></div>
+    <label for="s-disc">Descuento</label>
+    <div class="row">
+      <input id="s-disc" type="number" min="0" step="0.01" placeholder="0" inputmode="decimal" oninput="calc()">
+      <select id="s-dtype" onchange="calc()" style="width:130px"><option value="p">En %</option><option value="m">En monto</option></select>
+    </div>
+    <div class="tot"><span>Descuento aplicado</span><b id="t-dis"></b></div>
+    <div class="tot big"><span>Total</span><span id="t-tot"></span></div>
+    <label>Método de pago</label>
+    <div class="pay" id="pay">
+      <button data-m="Efectivo" onclick="setMethod('Efectivo')">Efectivo</button>
+      <button data-m="Pago móvil" onclick="setMethod('Pago móvil')">Pago móvil</button>
+      <button data-m="Punto" onclick="setMethod('Punto')">Punto</button>
+    </div>
+    <button class="btn ok" onclick="saveSale()">Registrar venta</button>
+  </div>
+</section>
+
+<section id="v-clientes">
+  <div class="card">
+    <h2 id="c-title">Nuevo cliente</h2>
+    <label for="c-name">Nombre</label>
+    <input id="c-name" autocomplete="off">
+    <label for="c-phone">Teléfono (opcional)</label>
+    <input id="c-phone" type="tel" inputmode="tel">
+    <button class="btn" onclick="saveClient()">Guardar cliente</button>
+    <button class="btn ghost" id="c-cancel" style="display:none" onclick="resetClient()">Cancelar edición</button>
+  </div>
+  <div class="card"><h2>Clientes</h2><div id="c-list"></div></div>
+</section>
+
+<section id="v-productos">
+  <div class="card">
+    <h2 id="p-title">Nuevo producto</h2>
+    <label for="p-name">Nombre</label>
+    <input id="p-name" autocomplete="off" placeholder="Ej: Fresas con crema grande">
+    <label for="p-price">Precio</label>
+    <input id="p-price" type="number" min="0" step="0.01" inputmode="decimal">
+    <button class="btn" onclick="saveProduct()">Guardar producto</button>
+    <button class="btn ghost" id="p-cancel" style="display:none" onclick="resetProduct()">Cancelar edición</button>
+  </div>
+  <div class="card"><h2>Productos</h2><div id="p-list"></div></div>
+</section>
+
+<section id="v-reportes">
+  <div class="card">
+    <h2>Reporte de ventas</h2>
+    <label for="r-range">Período</label>
+    <select id="r-range" onchange="renderReport()">
+      <option value="hoy">Hoy</option>
+      <option value="7">Últimos 7 días</option>
+      <option value="mes">Este mes</option>
+      <option value="todo">Todo</option>
+      <option value="custom">Elegir fechas</option>
+    </select>
+    <div class="row" id="r-custom" style="display:none;margin-top:8px">
+      <input id="r-from" type="date" onchange="renderReport()" aria-label="Desde">
+      <input id="r-to" type="date" onchange="renderReport()" aria-label="Hasta">
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><b id="r-count">0</b><span>Ventas realizadas</span></div>
+    <div class="stat alt"><b id="r-total">0</b><span>Saldo total</span></div>
+  </div>
+  <div class="card"><h2>Por método de pago</h2><div id="r-methods"></div></div>
+  <div class="card"><h2>Productos vendidos</h2><div id="r-products"></div></div>
+  <div class="card"><h2>Historial</h2><div id="r-sales"></div></div>
+</section>
+
+<section id="v-ajustes">
+  <div class="card">
+    <h2>Moneda</h2>
+    <label for="a-cur">Símbolo que se muestra junto a los precios</label>
+    <input id="a-cur" maxlength="5" onchange="saveCfg()">
+  </div>
+  <div class="card">
+    <h2>Copia de seguridad</h2>
+    <p class="s" style="color:var(--muted);margin:0 0 4px">Los datos viven solo en este teléfono. Si borras los datos del navegador o desinstalas la app, se pierden. Guarda una copia de vez en cuando.</p>
+    <button class="btn" onclick="exportData()">Descargar copia</button>
+    <button class="btn ghost" onclick="document.getElementById('a-file').click()">Restaurar copia</button>
+    <input id="a-file" type="file" accept="application/json,.json" style="display:none" onchange="importData(event)">
+  </div>
+  <div class="card">
+    <h2>Borrar todo</h2>
+    <button class="btn danger" onclick="wipe()">Borrar todos los datos</button>
+  </div>
+</section>
+
+</main>
+
+<nav>
+  <button class="on" data-v="venta" onclick="go('venta')"><span class="i">🧾</span>Venta</button>
+  <button data-v="clientes" onclick="go('clientes')"><span class="i">👥</span>Clientes</button>
+  <button data-v="productos" onclick="go('productos')"><span class="i">🍓</span>Productos</button>
+  <button data-v="reportes" onclick="go('reportes')"><span class="i">📊</span>Reportes</button>
+  <button data-v="ajustes" onclick="go('ajustes')"><span class="i">⚙️</span>Ajustes</button>
+</nav>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const KEY = 'fresas_ventas_v1';
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+function fresh(){ return { clients: [], products: [], sales: [], cfg: { cur: '$' } }; }
+function load(){
+  try{
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if(d && d.clients && d.products && d.sales){ d.cfg = d.cfg || { cur: '$' }; return d; }
+  }catch(e){}
+  return fresh();
+}
+let db = load();
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(db)); }
+  catch(e){ toast('No se pudo guardar. Revisa el espacio del teléfono.'); }
+}
+const money = n => db.cfg.cur + ' ' + (Math.round((+n + Number.EPSILON) * 100) / 100).toFixed(2);
+
+let tt;
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(tt); tt = setTimeout(() => t.classList.remove('on'), 2200);
+}
+
+/* ---------- Navegación ---------- */
+function go(v){
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === 'v-' + v));
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  if(v === 'venta') renderSaleSelects();
+  if(v === 'clientes') renderClients();
+  if(v === 'productos') renderProducts();
+  if(v === 'reportes') renderReport();
+  if(v === 'ajustes') $('#a-cur').value = db.cfg.cur;
+  window.scrollTo(0, 0);
+}
+
+/* ---------- Venta ---------- */
+let cart = [], method = 'Efectivo';
+
+function renderSaleSelects(){
+  const c = $('#s-client'), cv = c.value;
+  c.innerHTML = '<option value="">Cliente general</option>' +
+    db.clients.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  c.value = db.clients.some(x => x.id === cv) ? cv : '';
+  const p = $('#s-prod'), pv = p.value;
+  p.innerHTML = db.products.length
+    ? db.products.map(x => `<option value="${x.id}">${esc(x.name)} — ${money(x.price)}</option>`).join('')
+    : '<option value="">Primero registra productos</option>';
+  if(db.products.some(x => x.id === pv)) p.value = pv;
+  setMethod(method);
+  calc();
+}
+function setMethod(m){
+  method = m;
+  document.querySelectorAll('#pay button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+}
+function addItem(){
+  const id = $('#s-prod').value, p = db.products.find(x => x.id === id);
+  if(!p) return toast('Registra un producto primero');
+  const q = Math.max(1, parseInt($('#s-qty').value) || 1);
+  const it = cart.find(x => x.pid === id);
+  if(it) it.qty += q; else cart.push({ pid: id, name: p.name, price: p.price, qty: q });
+  $('#s-qty').value = 1;
+  calc();
+}
+function chg(i, d){
+  cart[i].qty += d;
+  if(cart[i].qty < 1) cart.splice(i, 1);
+  calc();
+}
+function totals(){
+  const sub = cart.reduce((a, x) => a + x.price * x.qty, 0);
+  const v = Math.max(0, parseFloat($('#s-disc').value) || 0);
+  const dis = $('#s-dtype').value === 'p' ? sub * Math.min(v, 100) / 100 : Math.min(v, sub);
+  return { sub, dis, tot: sub - dis };
+}
+function calc(){
+  $('#cart').innerHTML = cart.length ? cart.map((x, i) => `
+    <div class="item">
+      <div><div class="t">${esc(x.name)}</div><div class="s">${money(x.price)} c/u · ${money(x.price * x.qty)}</div></div>
+      <div class="qty"><button onclick="chg(${i},-1)" aria-label="Quitar uno">−</button><b>${x.qty}</b><button onclick="chg(${i},1)" aria-label="Agregar uno">+</button></div>
+    </div>`).join('') : '<div class="empty">Aún no hay productos en el pedido</div>';
+  const t = totals();
+  $('#t-sub').textContent = money(t.sub);
+  $('#t-dis').textContent = '− ' + money(t.dis);
+  $('#t-tot').textContent = money(t.tot);
+}
+function saveSale(){
+  if(!cart.length) return toast('Agrega al menos un producto');
+  const t = totals();
+  const cid = $('#s-client').value, cl = db.clients.find(x => x.id === cid);
+  db.sales.push({
+    id: uid(), date: new Date().toISOString(),
+    clientId: cl ? cl.id : '', clientName: cl ? cl.name : 'Cliente general',
+    items: cart.map(x => ({ ...x })),
+    subtotal: t.sub, discount: t.dis, total: t.tot, method
+  });
+  save();
+  cart = []; $('#s-disc').value = ''; $('#s-client').value = '';
+  calc();
+  toast('Venta registrada: ' + money(t.tot));
+}
+
+/* ---------- Clientes ---------- */
+let editC = null;
+function renderClients(){
+  const spent = {};
+  db.sales.forEach(s => { if(s.clientId) spent[s.clientId] = (spent[s.clientId] || 0) + s.total; });
+  $('#c-list').innerHTML = db.clients.length ? db.clients.map(c => `
+    <div class="item">
+      <div><div class="t">${esc(c.name)}</div><div class="s">${esc(c.phone || 'Sin teléfono')}${spent[c.id] ? ' · compró ' + money(spent[c.id]) : ''}</div></div>
+      <div class="row"><button class="btn ghost sm" onclick="editClient('${c.id}')">Editar</button><button class="btn danger sm" onclick="delClient('${c.id}')">Borrar</button></div>
+    </div>`).join('') : '<div class="empty">Todavía no hay clientes</div>';
+}
+function saveClient(){
+  const name = $('#c-name').value.trim(), phone = $('#c-phone').value.trim();
+  if(!name) return toast('Escribe el nombre del cliente');
+  if(editC){ const c = db.clients.find(x => x.id === editC); c.name = name; c.phone = phone; }
+  else db.clients.push({ id: uid(), name, phone });
+  save(); resetClient(); renderClients(); toast('Cliente guardado');
+}
+function editClient(id){
+  const c = db.clients.find(x => x.id === id); editC = id;
+  $('#c-name').value = c.name; $('#c-phone').value = c.phone || '';
+  $('#c-title').textContent = 'Editar cliente'; $('#c-cancel').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+function resetClient(){
+  editC = null; $('#c-name').value = ''; $('#c-phone').value = '';
+  $('#c-title').textContent = 'Nuevo cliente'; $('#c-cancel').style.display = 'none';
+}
+function delClient(id){
+  if(!confirm('¿Borrar este cliente? Sus ventas anteriores se conservan.')) return;
+  db.clients = db.clients.filter(x => x.id !== id);
+  save(); renderClients();
+}
+
+/* ---------- Productos ---------- */
+let editP = null;
+function renderProducts(){
+  $('#p-list').innerHTML = db.products.length ? db.products.map(p => `
+    <div class="item">
+      <div><div class="t">${esc(p.name)}</div><div class="s">${money(p.price)}</div></div>
+      <div class="row"><button class="btn ghost sm" onclick="editProduct('${p.id}')">Editar</button><button class="btn danger sm" onclick="delProduct('${p.id}')">Borrar</button></div>
+    </div>`).join('') : '<div class="empty">Todavía no hay productos</div>';
+}
+function saveProduct(){
+  const name = $('#p-name').value.trim(), price = parseFloat($('#p-price').value);
+  if(!name) return toast('Escribe el nombre del producto');
+  if(isNaN(price) || price < 0) return toast('Escribe un precio válido');
+  if(editP){ const p = db.products.find(x => x.id === editP); p.name = name; p.price = price; }
+  else db.products.push({ id: uid(), name, price });
+  save(); resetProduct(); renderProducts(); toast('Producto guardado');
+}
+function editProduct(id){
+  const p = db.products.find(x => x.id === id); editP = id;
+  $('#p-name').value = p.name; $('#p-price').value = p.price;
+  $('#p-title').textContent = 'Editar producto'; $('#p-cancel').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+function resetProduct(){
+  editP = null; $('#p-name').value = ''; $('#p-price').value = '';
+  $('#p-title').textContent = 'Nuevo producto'; $('#p-cancel').style.display = 'none';
+}
+function delProduct(id){
+  if(!confirm('¿Borrar este producto? Las ventas anteriores se conservan.')) return;
+  db.products = db.products.filter(x => x.id !== id);
+  cart = cart.filter(x => x.pid !== id);
+  save(); renderProducts();
+}
+
+/* ---------- Reportes ---------- */
+const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+function inRange(iso){
+  const r = $('#r-range').value, d = new Date(iso), now = new Date();
+  if(r === 'todo') return true;
+  if(r === 'hoy') return ymd(d) === ymd(now);
+  if(r === '7'){ const s = new Date(now); s.setDate(s.getDate() - 6); return ymd(d) >= ymd(s); }
+  if(r === 'mes') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  const f = $('#r-from').value, t = $('#r-to').value, k = ymd(d);
+  return (!f || k >= f) && (!t || k <= t);
+}
+function renderReport(){
+  $('#r-custom').style.display = $('#r-range').value === 'custom' ? 'flex' : 'none';
+  const list = db.sales.filter(s => inRange(s.date)).sort((a, b) => b.date.localeCompare(a.date));
+  $('#r-count').textContent = list.length;
+  $('#r-total').textContent = money(list.reduce((a, s) => a + s.total, 0));
+
+  const m = { 'Efectivo': 0, 'Pago móvil': 0, 'Punto': 0 }, mc = { 'Efectivo': 0, 'Pago móvil': 0, 'Punto': 0 };
+  list.forEach(s => { m[s.method] = (m[s.method] || 0) + s.total; mc[s.method] = (mc[s.method] || 0) + 1; });
+  $('#r-methods').innerHTML = Object.keys(m).map(k => `
+    <div class="item"><div><div class="t">${esc(k)}</div><div class="s">${mc[k]} venta${mc[k] === 1 ? '' : 's'}</div></div><b>${money(m[k])}</b></div>`).join('');
+
+  const pr = {};
+  list.forEach(s => s.items.forEach(i => {
+    const o = pr[i.name] = pr[i.name] || { q: 0, amt: 0 };
+    o.q += i.qty; o.amt += i.qty * i.price;
+  }));
+  const names = Object.keys(pr).sort((a, b) => pr[b].q - pr[a].q);
+  $('#r-products').innerHTML = names.length ? names.map(n => `
+    <div class="item"><div><div class="t">${esc(n)}</div><div class="s">Importe sin descuento: ${money(pr[n].amt)}</div></div><b>${pr[n].q} uds.</b></div>`).join('')
+    : '<div class="empty">No hay productos vendidos en este período</div>';
+
+  $('#r-sales').innerHTML = list.length ? list.map(s => {
+    const d = new Date(s.date);
+    return `<div class="item">
+      <div>
+        <div class="t">${esc(s.clientName)} · ${money(s.total)}</div>
+        <div class="s">${d.toLocaleDateString('es')} ${d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })} · <span class="tag">${esc(s.method)}</span></div>
+        <div class="s">${s.items.map(i => i.qty + '× ' + esc(i.name)).join(', ')}${s.discount > 0 ? ' · desc. ' + money(s.discount) : ''}</div>
+      </div>
+      <button class="btn danger sm" onclick="delSale('${s.id}')">Anular</button>
+    </div>`;
+  }).join('') : '<div class="empty">No hay ventas en este período</div>';
+}
+function delSale(id){
+  if(!confirm('¿Anular esta venta? Se quitará de los totales.')) return;
+  db.sales = db.sales.filter(x => x.id !== id);
+  save(); renderReport(); toast('Venta anulada');
+}
+
+/* ---------- Ajustes ---------- */
+function saveCfg(){
+  db.cfg.cur = $('#a-cur').value.trim() || '$';
+  save(); toast('Moneda actualizada');
+}
+function exportData(){
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'ventas-fresas-' + ymd(new Date()) + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function importData(ev){
+  const f = ev.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try{
+      const d = JSON.parse(r.result);
+      if(!d.clients || !d.products || !d.sales) throw 0;
+      if(!confirm('Esto reemplaza los datos actuales por los de la copia. ¿Continuar?')) return;
+      d.cfg = d.cfg || { cur: '$' };
+      db = d; save(); $('#a-cur').value = db.cfg.cur; toast('Copia restaurada');
+    }catch(e){ toast('El archivo no es una copia válida'); }
+  };
+  r.readAsText(f); ev.target.value = '';
+}
+function wipe(){
+  if(!confirm('Se borrarán clientes, productos y ventas. ¿Seguro?')) return;
+  if(!confirm('Última confirmación: esto no se puede deshacer.')) return;
+  db = fresh(); save(); cart = []; go('venta'); toast('Datos borrados');
+}
+
+/* ---------- Inicio ---------- */
+renderSaleSelects();
+if(navigator.storage && navigator.storage.persist) navigator.storage.persist();
+if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
