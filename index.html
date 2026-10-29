@@ -52,13 +52,21 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #F6A9B8;outline-
 .stat.alt{background:var(--leaf)}
 .stat b{display:block;font-size:26px;font-weight:900}
 .stat span{font-size:13px;opacity:.9}
-nav{position:fixed;bottom:0;left:0;right:0;background:var(--cream);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding-bottom:env(safe-area-inset-bottom,0px);z-index:6}
-nav button{border:0;background:none;padding:10px 2px 9px;font:inherit;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer}
-nav button .i{display:block;font-size:21px;line-height:1.1}
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--cream);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(6,1fr);padding-bottom:env(safe-area-inset-bottom,0px);z-index:6}
+nav button{border:0;background:none;padding:10px 1px 9px;font:inherit;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer}
+nav button .i{display:block;font-size:20px;line-height:1.1}
 nav button.on{color:var(--berry)}
 #toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 18px;border-radius:99px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .2s;z-index:9;max-width:90%;text-align:center}
 #toast.on{opacity:1}
 .tag{display:inline-block;font-size:12px;font-weight:700;background:var(--blush);color:var(--berry);border-radius:99px;padding:2px 9px}
+.banner{background:#FFF3CD;border:1.5px solid #E8B923;color:#5C4400;border-radius:var(--r);padding:12px 14px;margin-bottom:14px;font-weight:700}
+.banner small{display:block;font-weight:500;margin-top:2px}
+.tag.low{background:#FFE0DC;color:var(--warn)}
+.stock{font-weight:900;font-size:18px;white-space:nowrap}
+.stock.low{color:var(--warn)}
+dialog{border:0;border-radius:var(--r);padding:20px;max-width:88vw;width:360px;background:var(--cream);color:var(--ink)}
+dialog::backdrop{background:rgba(58,18,32,.55)}
+dialog h2{color:var(--warn)}
 @media (prefers-reduced-motion:reduce){#toast{transition:none}}
 </style>
 </head>
@@ -67,6 +75,7 @@ nav button.on{color:var(--berry)}
 <main>
 
 <section id="v-venta" class="on">
+  <div id="low-banner"></div>
   <div class="card">
     <h2>Nueva venta</h2>
     <label for="s-client">Cliente</label>
@@ -120,10 +129,31 @@ nav button.on{color:var(--berry)}
     <input id="p-name" autocomplete="off" placeholder="Ej: Fresas con crema grande">
     <label for="p-price">Precio</label>
     <input id="p-price" type="number" min="0" step="0.01" inputmode="decimal">
+    <label>Materiales que gasta cada unidad (opcional)</label>
+    <div class="row"><select id="p-mat" style="flex:2"></select><input id="p-mqty" type="number" min="0" step="any" value="1" inputmode="decimal" style="flex:1" aria-label="Cantidad por unidad"></div>
+    <button class="btn ghost" onclick="addRecipe()">Agregar material</button>
+    <div id="p-recipe"></div>
     <button class="btn" onclick="saveProduct()">Guardar producto</button>
     <button class="btn ghost" id="p-cancel" style="display:none" onclick="resetProduct()">Cancelar edición</button>
   </div>
   <div class="card"><h2>Productos</h2><div id="p-list"></div></div>
+</section>
+
+<section id="v-inventario">
+  <div class="card">
+    <h2 id="m-title">Nuevo material</h2>
+    <label for="m-name">Nombre</label>
+    <input id="m-name" autocomplete="off" placeholder="Ej: Fresas, crema, vasos">
+    <label for="m-unit">Unidad</label>
+    <input id="m-unit" value="unidades" placeholder="unidades, kg, litros...">
+    <label for="m-stock">Cantidad disponible</label>
+    <input id="m-stock" type="number" min="0" step="any" inputmode="decimal">
+    <label for="m-min">Avisar cuando queden esta cantidad o menos</label>
+    <input id="m-min" type="number" min="0" step="any" inputmode="decimal" value="10">
+    <button class="btn" onclick="saveMaterial()">Guardar material</button>
+    <button class="btn ghost" id="m-cancel" style="display:none" onclick="resetMaterial()">Cancelar edición</button>
+  </div>
+  <div class="card"><h2>Inventario</h2><div id="m-list"></div></div>
 </section>
 
 <section id="v-reportes">
@@ -176,9 +206,15 @@ nav button.on{color:var(--berry)}
   <button class="on" data-v="venta" onclick="go('venta')"><span class="i">🧾</span>Venta</button>
   <button data-v="clientes" onclick="go('clientes')"><span class="i">👥</span>Clientes</button>
   <button data-v="productos" onclick="go('productos')"><span class="i">🍓</span>Productos</button>
+  <button data-v="inventario" onclick="go('inventario')"><span class="i">📦</span>Inventario</button>
   <button data-v="reportes" onclick="go('reportes')"><span class="i">📊</span>Reportes</button>
   <button data-v="ajustes" onclick="go('ajustes')"><span class="i">⚙️</span>Ajustes</button>
 </nav>
+<dialog id="dlg">
+  <h2>🛒 Hay que comprar</h2>
+  <div id="dlg-body"></div>
+  <button class="btn" onclick="document.getElementById('dlg').close()">Entendido</button>
+</dialog>
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -187,11 +223,14 @@ const KEY = 'fresas_ventas_v1';
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-function fresh(){ return { clients: [], products: [], sales: [], cfg: { cur: '$' } }; }
+function fresh(){ return { clients: [], products: [], sales: [], materials: [], cfg: { cur: '$' } }; }
+function normalize(d){ d.cfg = d.cfg || { cur: '$' }; d.materials = d.materials || []; d.products.forEach(p => { p.recipe = p.recipe || []; }); return d; }
+const rn = n => Math.round((+n + Number.EPSILON) * 1000) / 1000;
+const fmt = n => String(rn(n));
 function load(){
   try{
     const d = JSON.parse(localStorage.getItem(KEY));
-    if(d && d.clients && d.products && d.sales){ d.cfg = d.cfg || { cur: '$' }; return d; }
+    if(d && d.clients && d.products && d.sales) return normalize(d);
   }catch(e){}
   return fresh();
 }
@@ -215,6 +254,7 @@ function go(v){
   if(v === 'venta') renderSaleSelects();
   if(v === 'clientes') renderClients();
   if(v === 'productos') renderProducts();
+  if(v === 'inventario') renderMaterials();
   if(v === 'reportes') renderReport();
   if(v === 'ajustes') $('#a-cur').value = db.cfg.cur;
   window.scrollTo(0, 0);
@@ -235,6 +275,7 @@ function renderSaleSelects(){
   if(db.products.some(x => x.id === pv)) p.value = pv;
   setMethod(method);
   calc();
+  renderLowBanner();
 }
 function setMethod(m){
   method = m;
@@ -275,16 +316,30 @@ function saveSale(){
   if(!cart.length) return toast('Agrega al menos un producto');
   const t = totals();
   const cid = $('#s-client').value, cl = db.clients.find(x => x.id === cid);
+  // materiales que gasta este pedido
+  const used = {};
+  cart.forEach(it => {
+    const p = db.products.find(x => x.id === it.pid); if(!p) return;
+    (p.recipe || []).forEach(r => { used[r.mid] = (used[r.mid] || 0) + r.qty * it.qty; });
+  });
+  const touched = Object.keys(used).map(id => db.materials.find(m => m.id === id)).filter(Boolean);
+  const short = touched.filter(m => m.stock < used[m.id] - 1e-9);
+  if(short.length && !confirm('No alcanza el inventario de: ' + short.map(m => m.name).join(', ') + '.\n¿Registrar la venta igual?')) return;
+  const before = {}; touched.forEach(m => { before[m.id] = m.stock; });
+  touched.forEach(m => { m.stock = rn(m.stock - used[m.id]); });
   db.sales.push({
     id: uid(), date: new Date().toISOString(),
     clientId: cl ? cl.id : '', clientName: cl ? cl.name : 'Cliente general',
     items: cart.map(x => ({ ...x })),
-    subtotal: t.sub, discount: t.dis, total: t.tot, method
+    subtotal: t.sub, discount: t.dis, total: t.tot, method,
+    used: touched.map(m => ({ mid: m.id, qty: rn(used[m.id]) }))
   });
   save();
   cart = []; $('#s-disc').value = ''; $('#s-client').value = '';
-  calc();
+  calc(); renderLowBanner();
   toast('Venta registrada: ' + money(t.tot));
+  const nuevos = touched.filter(m => (before[m.id] > m.min && m.stock <= m.min) || (before[m.id] > 0 && m.stock <= 0));
+  if(nuevos.length) showBuy(nuevos);
 }
 
 /* ---------- Clientes ---------- */
@@ -322,11 +377,12 @@ function delClient(id){
 }
 
 /* ---------- Productos ---------- */
-let editP = null;
+let editP = null, pRecipe = [];
 function renderProducts(){
+  renderRecipeSelect(); renderRecipe();
   $('#p-list').innerHTML = db.products.length ? db.products.map(p => `
     <div class="item">
-      <div><div class="t">${esc(p.name)}</div><div class="s">${money(p.price)}</div></div>
+      <div><div class="t">${esc(p.name)}</div><div class="s">${money(p.price)}${recipeText(p)}</div></div>
       <div class="row"><button class="btn ghost sm" onclick="editProduct('${p.id}')">Editar</button><button class="btn danger sm" onclick="delProduct('${p.id}')">Borrar</button></div>
     </div>`).join('') : '<div class="empty">Todavía no hay productos</div>';
 }
@@ -334,18 +390,20 @@ function saveProduct(){
   const name = $('#p-name').value.trim(), price = parseFloat($('#p-price').value);
   if(!name) return toast('Escribe el nombre del producto');
   if(isNaN(price) || price < 0) return toast('Escribe un precio válido');
-  if(editP){ const p = db.products.find(x => x.id === editP); p.name = name; p.price = price; }
-  else db.products.push({ id: uid(), name, price });
+  const recipe = pRecipe.map(r => ({ ...r }));
+  if(editP){ const p = db.products.find(x => x.id === editP); p.name = name; p.price = price; p.recipe = recipe; }
+  else db.products.push({ id: uid(), name, price, recipe });
   save(); resetProduct(); renderProducts(); toast('Producto guardado');
 }
 function editProduct(id){
   const p = db.products.find(x => x.id === id); editP = id;
   $('#p-name').value = p.name; $('#p-price').value = p.price;
+  pRecipe = (p.recipe || []).map(r => ({ ...r })); renderRecipe();
   $('#p-title').textContent = 'Editar producto'; $('#p-cancel').style.display = 'block';
   window.scrollTo(0, 0);
 }
 function resetProduct(){
-  editP = null; $('#p-name').value = ''; $('#p-price').value = '';
+  editP = null; pRecipe = []; $('#p-name').value = ''; $('#p-price').value = ''; renderRecipe();
   $('#p-title').textContent = 'Nuevo producto'; $('#p-cancel').style.display = 'none';
 }
 function delProduct(id){
@@ -400,7 +458,9 @@ function renderReport(){
   }).join('') : '<div class="empty">No hay ventas en este período</div>';
 }
 function delSale(id){
-  if(!confirm('¿Anular esta venta? Se quitará de los totales.')) return;
+  if(!confirm('¿Anular esta venta? Se quitará de los totales y los materiales regresan al inventario.')) return;
+  const sv = db.sales.find(x => x.id === id);
+  if(sv) (sv.used || []).forEach(u => { const m = db.materials.find(x => x.id === u.mid); if(m) m.stock = rn(m.stock + u.qty); });
   db.sales = db.sales.filter(x => x.id !== id);
   save(); renderReport(); toast('Venta anulada');
 }
@@ -426,7 +486,7 @@ function importData(ev){
       const d = JSON.parse(r.result);
       if(!d.clients || !d.products || !d.sales) throw 0;
       if(!confirm('Esto reemplaza los datos actuales por los de la copia. ¿Continuar?')) return;
-      d.cfg = d.cfg || { cur: '$' };
+      normalize(d);
       db = d; save(); $('#a-cur').value = db.cfg.cur; toast('Copia restaurada');
     }catch(e){ toast('El archivo no es una copia válida'); }
   };
@@ -436,6 +496,97 @@ function wipe(){
   if(!confirm('Se borrarán clientes, productos y ventas. ¿Seguro?')) return;
   if(!confirm('Última confirmación: esto no se puede deshacer.')) return;
   db = fresh(); save(); cart = []; go('venta'); toast('Datos borrados');
+}
+
+/* ---------- Inventario ---------- */
+let editM = null;
+const lowList = () => db.materials.filter(m => m.stock <= m.min);
+function renderLowBanner(){
+  const l = lowList(), el = $('#low-banner');
+  el.innerHTML = l.length ? `<div class="banner">🛒 Hay que comprar: ${l.map(m => esc(m.name) + ' (' + fmt(m.stock) + ')').join(', ')}<small>Entra a Inventario para sumar lo que compres.</small></div>` : '';
+}
+function showBuy(list){
+  $('#dlg-body').innerHTML = '<p style="margin:0 0 6px">Se está acabando:</p>' +
+    list.map(m => `<div class="item"><span class="t">${esc(m.name)}</span><b class="stock low">${fmt(m.stock)} ${esc(m.unit)}</b></div>`).join('') +
+    '<p class="s" style="color:var(--muted)">Recuerda comprar antes de que se agote.</p>';
+  const d = $('#dlg');
+  if(d.showModal) d.showModal(); else alert('Hay que comprar: ' + list.map(m => m.name + ' (quedan ' + fmt(m.stock) + ')').join(', '));
+}
+function renderMaterials(){
+  $('#m-list').innerHTML = db.materials.length ? db.materials.map(m => {
+    const low = m.stock <= m.min;
+    return `<div class="item" style="flex-wrap:wrap">
+      <div><div class="t">${esc(m.name)} ${low ? '<span class="tag low">Comprar</span>' : ''}</div><div class="s">Aviso cuando queden ${fmt(m.min)} o menos</div></div>
+      <div class="stock ${low ? 'low' : ''}">${fmt(m.stock)} ${esc(m.unit)}</div>
+      <div class="row" style="width:100%">
+        <button class="btn sm" style="flex:1" onclick="addStock('${m.id}')">+ Stock</button>
+        <button class="btn ghost sm" style="flex:1" onclick="editMaterial('${m.id}')">Editar</button>
+        <button class="btn danger sm" style="flex:1" onclick="delMaterial('${m.id}')">Borrar</button>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty">Todavía no hay materiales</div>';
+}
+function saveMaterial(){
+  const name = $('#m-name').value.trim(), unit = $('#m-unit').value.trim() || 'unidades';
+  const stock = parseFloat($('#m-stock').value), min = parseFloat($('#m-min').value);
+  if(!name) return toast('Escribe el nombre del material');
+  if(isNaN(stock)) return toast('Escribe la cantidad disponible');
+  const mn = isNaN(min) || min < 0 ? 10 : min;
+  if(editM){ const m = db.materials.find(x => x.id === editM); m.name = name; m.unit = unit; m.stock = rn(stock); m.min = mn; }
+  else db.materials.push({ id: uid(), name, unit, stock: rn(stock), min: mn });
+  save(); resetMaterial(); renderMaterials(); renderLowBanner(); toast('Material guardado');
+}
+function editMaterial(id){
+  const m = db.materials.find(x => x.id === id); editM = id;
+  $('#m-name').value = m.name; $('#m-unit').value = m.unit; $('#m-stock').value = m.stock; $('#m-min').value = m.min;
+  $('#m-title').textContent = 'Editar material'; $('#m-cancel').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+function resetMaterial(){
+  editM = null; $('#m-name').value = ''; $('#m-unit').value = 'unidades'; $('#m-stock').value = ''; $('#m-min').value = 10;
+  $('#m-title').textContent = 'Nuevo material'; $('#m-cancel').style.display = 'none';
+}
+function addStock(id){
+  const m = db.materials.find(x => x.id === id);
+  const v = parseFloat(String(prompt('¿Cuánto compraste de ' + m.name + '? (' + m.unit + ')') || '').replace(',', '.'));
+  if(isNaN(v) || v <= 0) return;
+  m.stock = rn(m.stock + v);
+  save(); renderMaterials(); renderLowBanner(); toast(m.name + ': ahora ' + fmt(m.stock) + ' ' + m.unit);
+}
+function delMaterial(id){
+  if(!confirm('¿Borrar este material? También se quitará de las recetas de los productos.')) return;
+  db.materials = db.materials.filter(x => x.id !== id);
+  db.products.forEach(p => { p.recipe = (p.recipe || []).filter(r => r.mid !== id); });
+  pRecipe = pRecipe.filter(r => r.mid !== id);
+  save(); renderMaterials(); renderLowBanner();
+}
+
+/* ---------- Materiales por producto ---------- */
+function renderRecipeSelect(){
+  const sel = $('#p-mat'), v = sel.value;
+  sel.innerHTML = db.materials.length
+    ? db.materials.map(m => `<option value="${m.id}">${esc(m.name)} (${esc(m.unit)})</option>`).join('')
+    : '<option value="">Primero registra materiales</option>';
+  if(db.materials.some(m => m.id === v)) sel.value = v;
+}
+function addRecipe(){
+  const id = $('#p-mat').value, m = db.materials.find(x => x.id === id);
+  if(!m) return toast('Primero registra materiales en Inventario');
+  const q = parseFloat($('#p-mqty').value);
+  if(isNaN(q) || q <= 0) return toast('Escribe cuánto gasta cada unidad');
+  const r = pRecipe.find(x => x.mid === id);
+  if(r) r.qty = q; else pRecipe.push({ mid: id, qty: q });
+  $('#p-mqty').value = 1; renderRecipe();
+}
+function renderRecipe(){
+  $('#p-recipe').innerHTML = pRecipe.map((r, i) => {
+    const m = db.materials.find(x => x.id === r.mid); if(!m) return '';
+    return `<div class="item"><div><div class="t">${esc(m.name)}</div><div class="s">${fmt(r.qty)} ${esc(m.unit)} por unidad</div></div><button class="btn danger sm" onclick="pRecipe.splice(${i},1);renderRecipe()">Quitar</button></div>`;
+  }).join('');
+}
+function recipeText(p){
+  const parts = (p.recipe || []).map(r => { const m = db.materials.find(x => x.id === r.mid); return m ? fmt(r.qty) + ' ' + esc(m.name) : ''; }).filter(Boolean);
+  return parts.length ? ' · usa: ' + parts.join(', ') : '';
 }
 
 /* ---------- Inicio ---------- */
