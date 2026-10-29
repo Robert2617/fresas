@@ -172,6 +172,10 @@ dialog h2{color:var(--warn)}
       <input id="r-to" type="date" onchange="renderReport()" aria-label="Hasta">
     </div>
   </div>
+  <div class="row" style="margin-bottom:14px">
+    <button class="btn" style="flex:1;margin:0" onclick="exportReport('xlsx')">⬇ Excel</button>
+    <button class="btn ghost" style="flex:1;margin:0" onclick="exportReport('docx')">⬇ Word</button>
+  </div>
   <div class="stats">
     <div class="stat"><b id="r-count">0</b><span>Ventas realizadas</span></div>
     <div class="stat alt"><b id="r-total">0</b><span>Saldo total</span></div>
@@ -463,6 +467,137 @@ function delSale(id){
   if(sv) (sv.used || []).forEach(u => { const m = db.materials.find(x => x.id === u.mid); if(m) m.stock = rn(m.stock + u.qty); });
   db.sales = db.sales.filter(x => x.id !== id);
   save(); renderReport(); toast('Venta anulada');
+}
+
+/* ---------- Exportar reporte a Excel (.xlsx) y Word (.docx) ---------- */
+const xe = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const CRC = (() => { const t = new Uint32Array(256); for(let n = 0; n < 256; n++){ let c = n; for(let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b){ let c = 0xFFFFFFFF; for(let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function makeZip(files, mime){
+  const enc = new TextEncoder(), parts = [], cen = []; let off = 0;
+  const u16 = n => [n & 255, (n >>> 8) & 255];
+  const u32 = n => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+  files.forEach(f => {
+    const name = enc.encode(f.name), data = enc.encode(f.data), crc = crc32(data);
+    const head = new Uint8Array([0x50, 0x4B, 3, 4, ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0)]);
+    const ch = new Uint8Array([0x50, 0x4B, 1, 2, ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]);
+    parts.push(head, name, data); cen.push(ch, name);
+    off += head.length + name.length + data.length;
+  });
+  const cdSize = cen.reduce((a, x) => a + x.length, 0);
+  const end = new Uint8Array([0x50, 0x4B, 5, 6, ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(cdSize), ...u32(off), ...u16(0)]);
+  return new Blob([...parts, ...cen, end], { type: mime });
+}
+function saveBlob(blob, name){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function summarize(list){
+  const S = { count: list.length, total: list.reduce((a, s) => a + s.total, 0), m: {}, mc: {}, pr: {} };
+  ['Efectivo', 'Pago móvil', 'Punto'].forEach(k => { S.m[k] = 0; S.mc[k] = 0; });
+  list.forEach(s => {
+    S.m[s.method] = (S.m[s.method] || 0) + s.total; S.mc[s.method] = (S.mc[s.method] || 0) + 1;
+    s.items.forEach(i => { const o = S.pr[i.name] = S.pr[i.name] || { q: 0, amt: 0 }; o.q += i.qty; o.amt += i.qty * i.price; });
+  });
+  S.methods = Object.keys(S.m);
+  S.names = Object.keys(S.pr).sort((a, b) => S.pr[b].q - S.pr[a].q);
+  return S;
+}
+const prodText = s => s.items.map(i => i.qty + ' x ' + i.name).join(', ');
+const fechaTxt = iso => new Date(iso).toLocaleString('es', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+function xrows(rows){
+  const L = i => String.fromCharCode(65 + i);
+  return rows.map((r, i) => `<row r="${i + 1}">` + r.map((c, j) => {
+    const [v, st] = Array.isArray(c) ? c : [c, 0];
+    if(v === '' || v == null) return '';
+    const ref = L(j) + (i + 1);
+    return typeof v === 'number'
+      ? `<c r="${ref}" s="${st || 0}"><v>${v}</v></c>`
+      : `<c r="${ref}" s="${st || 0}" t="inlineStr"><is><t xml:space="preserve">${xe(v)}</t></is></c>`;
+  }).join('') + '</row>').join('');
+}
+function buildXlsx(list, S, periodo){
+  const H = t => [t, 1];
+  const rows1 = [[H('Cliente'), H('Producto'), H('Monto'), H('Fecha'), H('Método de pago')]];
+  list.forEach(s => {
+    const d = new Date(s.date);
+    const serial = Number(((d.getTime() - d.getTimezoneOffset() * 60000) / 86400000 + 25569).toFixed(6));
+    rows1.push([s.clientName, prodText(s), [rn(s.total), 2], [serial, 3], s.method]);
+  });
+  rows1.push(['', ['TOTAL', 5], [rn(S.total), 4]]);
+  const rows2 = [
+    [['Reporte de ventas', 5]], ['Período: ' + periodo], [],
+    ['Ventas realizadas', S.count], ['Saldo total', [rn(S.total), 2]], [],
+    [H('Método de pago'), H('Ventas'), H('Monto')],
+    ...S.methods.map(k => [k, S.mc[k], [rn(S.m[k]), 2]]), [],
+    [H('Producto'), H('Unidades'), H('Importe sin descuento')],
+    ...S.names.map(n => [n, S.pr[n].q, [rn(S.pr[n].amt), 2]])
+  ];
+  const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+  const X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const sheet = (rows, widths, freeze) => X + `<worksheet ${NS}><sheetViews><sheetView workbookViewId="0">${freeze ? '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>' : ''}</sheetView></sheetViews><cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols><sheetData>${xrows(rows)}</sheetData></worksheet>`;
+  const styles = X + `<styleSheet ${NS}><numFmts count="2"><numFmt numFmtId="164" formatCode="dd/mm/yyyy hh:mm"/><numFmt numFmtId="165" formatCode="&quot;${xe(db.cfg.cur)}&quot; #,##0.00"/></numFmts>` +
+    '<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
+    '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFB3173A"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+    '<cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+    '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
+    '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+    '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+    '<xf numFmtId="165" fontId="2" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>' +
+    '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>' +
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const PK = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  return makeZip([
+    { name: '[Content_Types].xml', data: X + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>' },
+    { name: '_rels/.rels', data: X + `<Relationships xmlns="${PK}"><Relationship Id="rId1" Type="${R}/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
+    { name: 'xl/workbook.xml', data: X + `<workbook ${NS} xmlns:r="${R}"><sheets><sheet name="Ventas" sheetId="1" r:id="rId1"/><sheet name="Resumen" sheetId="2" r:id="rId2"/></sheets></workbook>` },
+    { name: 'xl/_rels/workbook.xml.rels', data: X + `<Relationships xmlns="${PK}"><Relationship Id="rId1" Type="${R}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${R}/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="${R}/styles" Target="styles.xml"/></Relationships>` },
+    { name: 'xl/styles.xml', data: styles },
+    { name: 'xl/worksheets/sheet1.xml', data: sheet(rows1, [24, 46, 14, 18, 16], true) },
+    { name: 'xl/worksheets/sheet2.xml', data: sheet(rows2, [30, 12, 24], false) }
+  ], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
+
+function wTable(widths, header, rows, aligns){
+  const cell = (t, w, hdr, al) => `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${hdr ? '<w:shd w:val="clear" w:color="auto" w:fill="B3173A"/>' : ''}</w:tcPr><w:p><w:pPr><w:spacing w:before="40" w:after="40"/>${al === 'r' ? '<w:jc w:val="right"/>' : ''}</w:pPr><w:r><w:rPr>${hdr ? '<w:b/><w:color w:val="FFFFFF"/>' : ''}<w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">${xe(t)}</w:t></w:r></w:p></w:tc>`;
+  const tr = (cells, hdr) => `<w:tr>${hdr ? '<w:trPr><w:tblHeader/></w:trPr>' : ''}${cells.map((t, i) => cell(t, widths[i], hdr, aligns[i])).join('')}</w:tr>`;
+  const b = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(k => `<w:${k} w:val="single" w:sz="4" w:space="0" w:color="D9A5B3"/>`).join('');
+  return `<w:tbl><w:tblPr><w:tblW w:w="${widths.reduce((a, x) => a + x, 0)}" w:type="dxa"/><w:tblBorders>${b}</w:tblBorders><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${widths.map(x => `<w:gridCol w:w="${x}"/>`).join('')}</w:tblGrid>${tr(header, true)}${rows.map(r => tr(r, false)).join('')}</w:tbl>`;
+}
+const wp = (t, bold, size) => `<w:p><w:pPr><w:spacing w:before="160" w:after="80"/></w:pPr><w:r><w:rPr>${bold ? '<w:b/>' : ''}<w:sz w:val="${size}"/></w:rPr><w:t xml:space="preserve">${xe(t)}</w:t></w:r></w:p>`;
+function buildDocx(list, S, periodo){
+  const X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const rows = list.map(s => [s.clientName, prodText(s), money(s.total), fechaTxt(s.date), s.method]);
+  rows.push(['', 'TOTAL', money(S.total), '', '']);
+  const body = wp('Reporte de ventas · Fresas con Crema', true, 34) + wp('Período: ' + periodo, false, 22) +
+    wp('Ventas realizadas: ' + S.count + '   ·   Saldo total: ' + money(S.total), true, 22) +
+    wTable([1700, 3300, 1400, 1900, 1900], ['Cliente', 'Producto', 'Monto', 'Fecha', 'Método de pago'], rows, ['l', 'l', 'r', 'l', 'l']) +
+    wp('Por método de pago', true, 26) +
+    wTable([4200, 2000, 4000], ['Método de pago', 'Ventas', 'Monto'], S.methods.map(k => [k, String(S.mc[k]), money(S.m[k])]), ['l', 'r', 'r']) +
+    wp('Productos vendidos', true, 26) +
+    wTable([4200, 2000, 4000], ['Producto', 'Unidades', 'Importe sin descuento'], S.names.map(n => [n, String(S.pr[n].q), money(S.pr[n].amt)]), ['l', 'r', 'r']) +
+    '<w:p/>';
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  return makeZip([
+    { name: '[Content_Types].xml', data: X + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>' },
+    { name: '_rels/.rels', data: X + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
+    { name: 'word/document.xml', data: X + `<w:document xmlns:w="${W}"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="850" w:bottom="850" w:left="850" w:header="400" w:footer="400" w:gutter="0"/></w:sectPr></w:body></w:document>` }
+  ], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+}
+function exportReport(kind){
+  const list = db.sales.filter(s => inRange(s.date)).sort((a, b) => a.date.localeCompare(b.date));
+  if(!list.length) return toast('No hay ventas en este período');
+  const r = $('#r-range');
+  const periodo = r.value === 'custom' ? 'del ' + ($('#r-from').value || 'inicio') + ' al ' + ($('#r-to').value || 'hoy') : r.selectedOptions[0].text;
+  const S = summarize(list);
+  const blob = kind === 'xlsx' ? buildXlsx(list, S, periodo) : buildDocx(list, S, periodo);
+  saveBlob(blob, 'ventas-fresas-' + ymd(new Date()) + '.' + kind);
+  toast('Reporte descargado');
 }
 
 /* ---------- Ajustes ---------- */
